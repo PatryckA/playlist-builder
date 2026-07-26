@@ -675,17 +675,17 @@ async function getAllPlaylists() {
 }
 
 async function getPlaylistTracks(pid) {
-  let tracks=[], url=`/playlists/${pid}/tracks?limit=100&fields=next,items(track(id,name,artists,duration_ms))`;
+  let tracks=[], url=`/playlists/${pid}/tracks?limit=100`;
   while(url) {
     const d = await spFetch(url);
-    const valid = (d.items||[]).filter(i=>i.track&&i.track.id);
+    const valid = (d.items||[]).filter(i => i.track && i.track.id && !i.is_local && !i.track.is_local);
     tracks = tracks.concat(valid.map(i=>({
       id:      i.track.id,
       name:    i.track.name,
-      artist:  i.track.artists.map(a=>a.name).join(', '),
+      artist:  (i.track.artists||[]).map(a=>a.name).join(', '),
       dur:     Math.round((i.track.duration_ms||210000)/1000),
     })));
-    url = d.next||null;
+    url = d.next || null;
   }
   return tracks;
 }
@@ -782,28 +782,38 @@ async function doExport() {
     // Load tracks for each selected category
     const pool = [];
     const seen = new Set();
+    const failedCats = [];
 
     for(const item of selectedItems) {
       const key = item.dataset.key;
       const pid = item.dataset.pid;
       if(!pid) continue;
 
-      setStatus('export-status', `Loading ${CATEGORIES.find(c=>c.key===key)?.label||key}…`);
+      const catLabel = CATEGORIES.find(c=>c.key===key)?.label||key;
+      setStatus('export-status', `Loading ${catLabel}…`);
 
-      if(!catCache[key]) {
-        catCache[key] = await getPlaylistTracks(pid);
-      }
-
-      for(const t of catCache[key]) {
-        if(!seen.has(t.id)) {
-          seen.add(t.id);
-          pool.push({...t, cat: key});
+      try {
+        if(!catCache[key]) {
+          catCache[key] = await getPlaylistTracks(pid);
         }
+        for(const t of catCache[key]) {
+          if(!seen.has(t.id)) {
+            seen.add(t.id);
+            pool.push({...t, cat: key});
+          }
+        }
+      } catch(e) {
+        console.error(`Failed to load ${catLabel}:`, e);
+        failedCats.push(catLabel);
       }
     }
 
+    if(failedCats.length) {
+      setStatus('export-status', `⚠ Skipped (couldn't read): ${failedCats.join(', ')}. Continuing with the rest…`, 'error');
+    }
+
     if(!pool.length) {
-      setStatus('export-status','No tracks found.','error');
+      setStatus('export-status','No tracks could be loaded from any selected playlist.','error');
       btn.disabled = false;
       return;
     }
@@ -839,7 +849,11 @@ async function doExport() {
     // Show result
     document.getElementById('export-box').textContent = prompt;
     document.getElementById('export-result-card').style.display = 'block';
-    setStatus('export-status','');
+    if(failedCats.length) {
+      setStatus('export-status', `⚠ Note: couldn't read ${failedCats.join(', ')} — proceeded without them.`, 'error');
+    } else {
+      setStatus('export-status','');
+    }
 
     // Scroll to result
     document.getElementById('export-result-card').scrollIntoView({behavior:'smooth',block:'start'});
