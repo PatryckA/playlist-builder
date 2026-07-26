@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Playlist Builder</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:        #0d0d0f;
+    --surface:   #16161a;
+    --border:    #2a2a32;
+    --accent:    #b8f565;
+    --text:      #e8e8f0;
+    --muted:     #6b6b80;
+    --danger:    #ff5e5e;
+    --spotify:   #1db954;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 64px;
+  }
+
+  header {
+    width: 100%;
+    max-width: 580px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0 28px;
+  }
+
+  .logo {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .header-btns { display: flex; gap: 8px; }
+
+  .icon-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 15px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--muted); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 580px;
+    margin-bottom: 14px;
+  }
+
+  .card-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  /* Steps indicator */
+  .steps {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+    width: 100%;
+    max-width: 580px;
+  }
+  .step {
+    flex: 1;
+    text-align: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 10px 4px;
+    color: var(--muted);
+    border-bottom: 2px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .step.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .step.done {
+    color: var(--muted);
+    border-bottom-color: var(--accent);
+    opacity: 0.6;
+  }
+
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    margin-top: 16px;
+  }
+  label:first-of-type { margin-top: 0; }
+
+  input[type="text"],
+  input[type="password"],
+  textarea,
+  select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 90px; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 11px 20px;
+    transition: opacity 0.2s, transform 0.1s;
+    width: 100%;
+    margin-top: 16px;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-accent { background: var(--accent); color: #0d0d0f; font-weight: 600; }
+  .btn-accent:hover:not(:disabled) { opacity: 0.88; }
+
+  .btn-spotify { background: var(--spotify); color: #fff; font-weight: 600; }
+  .btn-spotify:hover:not(:disabled) { opacity: 0.88; }
+
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-outline:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .btn-ghost:hover { border-color: var(--muted); color: var(--text); }
+
+  /* Category checkboxes */
+  .categories { display: grid; gap: 8px; }
+  .cat-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    user-select: none;
+  }
+  .cat-item:hover { border-color: var(--muted); }
+  .cat-item.selected { border-color: var(--accent); }
+  .cat-item.unavailable { opacity: 0.35; cursor: default; }
+  .cat-item input[type="checkbox"] { display: none; }
+  .cat-check {
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .cat-item.selected .cat-check { background: var(--accent); border-color: var(--accent); }
+  .cat-check::after {
+    content: ''; display: none;
+    width: 4px; height: 7px;
+    border: 2px solid #0d0d0f;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+  }
+  .cat-item.selected .cat-check::after { display: block; }
+  .cat-label { font-size: 14px; color: var(--text); flex: 1; }
+  .cat-count {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; color: var(--muted);
+  }
+
+  .status {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 10px 0 2px;
+    min-height: 30px;
+  }
+  .status.error { color: var(--danger); }
+  .status.success { color: var(--accent); }
+
+  /* Export box */
+  .export-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 260px;
+    overflow-y: auto;
+    line-height: 1.7;
+    margin-top: 12px;
+  }
+
+  /* Import textarea styled differently */
+  #import-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    min-height: 200px;
+    color: var(--accent);
+  }
+
+  /* Track list */
+  .track-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 12px;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+  .track-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    background: var(--bg);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .track-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; color: var(--muted);
+    width: 22px; text-align: right; flex-shrink: 0;
+  }
+  .track-info { flex: 1; min-width: 0; }
+  .track-name {
+    font-size: 13px; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .track-artist {
+    font-size: 11px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .phase-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; color: var(--muted);
+    flex-shrink: 0; text-align: right;
+    max-width: 90px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .spotify-bar {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--muted);
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%; background: var(--border); flex-shrink: 0;
+  }
+  .dot.on { background: var(--spotify); }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+
+  .success-hl {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px; color: var(--accent);
+    letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px;
+  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .view { display: none; width: 100%; max-width: 580px; }
+  .view.active { display: block; }
+
+  /* Instruction box */
+  .instruction {
+    background: #1a1a20;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin: 12px 0 4px;
+  }
+  .instruction strong { color: var(--text); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .pulse { animation: pulse 1.2s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">⬡ Playlist Builder</span>
+  <div class="header-btns">
+    <button class="icon-btn" onclick="showView('settings')" title="Settings">⚙</button>
+  </div>
+</header>
+
+<!-- ══ SETTINGS ══ -->
+<div id="view-settings" class="view">
+  <div class="card">
+    <div class="card-title">Settings</div>
+    <label>Spotify Client ID</label>
+    <input type="text" id="s-client-id" placeholder="733d1a3fe7a94d48a0310c726f468b7a">
+    <button class="btn btn-accent" onclick="saveSettings()">Save</button>
+    <div class="status" id="settings-status"></div>
+    <hr class="divider">
+    <div class="spotify-bar">
+      <div class="dot" id="settings-dot"></div>
+      <span id="settings-user">Not connected to Spotify</span>
+    </div>
+    <button class="btn btn-spotify" id="settings-auth-btn" onclick="startSpotifyAuth()" style="margin-top:14px;">Connect Spotify</button>
+    <button class="btn btn-ghost" onclick="disconnectSpotify()" style="margin-top:8px;">Disconnect Spotify</button>
+  </div>
+</div>
+
+<!-- ══ SETUP (first visit) ══ -->
+<div id="view-setup" class="view">
+  <div class="card">
+    <div class="card-title">Welcome — first-time setup</div>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:4px;">Connect your Spotify account to get started. Your Client ID is already configured.</p>
+    <button class="btn btn-spotify" onclick="startSpotifyAuth()">Connect Spotify Account</button>
+    <div class="status" id="setup-status"></div>
+  </div>
+</div>
+
+<!-- ══ AUTH ══ -->
+<div id="view-auth" class="view">
+  <div class="card">
+    <div class="card-title">Reconnect Spotify</div>
+    <p style="font-size:14px;color:var(--muted);">Your session has expired. Sign in again to continue.</p>
+    <button class="btn btn-spotify" onclick="startSpotifyAuth()">Connect Spotify</button>
+    <div class="status" id="auth-status"></div>
+  </div>
+</div>
+
+<!-- ══ MAIN ══ -->
+<div id="view-main" class="view">
+
+  <!-- Spotify bar -->
+  <div class="card" style="padding:14px 20px;">
+    <div class="spotify-bar">
+      <div class="dot on"></div>
+      <span id="spotify-user-label">Connected to Spotify</span>
+      <button class="icon-btn" style="margin-left:auto;font-size:12px;padding:4px 10px;" onclick="showView('settings')">⚙</button>
+    </div>
+  </div>
+
+  <!-- Step tabs -->
+  <div class="steps">
+    <div class="step active" id="tab-export" onclick="switchTab('export')">① Export</div>
+    <div class="step" id="tab-import" onclick="switchTab('import')">② Import</div>
+  </div>
+
+  <!-- ── EXPORT TAB ── -->
+  <div id="panel-export">
+
+    <div class="card">
+      <div class="card-title">Choose source playlists</div>
+      <div class="categories" id="category-list"></div>
+      <div class="status" id="cat-status"></div>
+      <button class="btn btn-ghost" onclick="loadCategoryPlaylists()" style="margin-top:12px;">↺ Refresh</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Describe your playlist</div>
+
+      <label>Duration</label>
+      <select id="duration">
+        <option value="30">30 minutes (~9 tracks)</option>
+        <option value="60">1 hour (~17 tracks)</option>
+        <option value="90">1.5 hours (~26 tracks)</option>
+        <option value="120" selected>2 hours (~34 tracks)</option>
+        <option value="180">3 hours (~51 tracks)</option>
+        <option value="240">4 hours (~69 tracks)</option>
+        <option value="270">4.5 hours (~77 tracks)</option>
+      </select>
+
+      <label>Playlist name (for Spotify)</label>
+      <input type="text" id="playlist-name" placeholder="e.g. Smooth Sundayz 29 March">
+
+      <label>Vibe & structure</label>
+      <textarea id="vibe-description" placeholder="e.g. Modern Jive social dance party. 3 energy peaks (early, mid, late). No two songs by the same artist back to back. Max 10 BPM jump between adjacent songs. Slow wind-down for the last 20 mins."></textarea>
+
+      <button class="btn btn-accent" id="export-btn" onclick="doExport()">Generate Track List for Claude</button>
+      <div class="status" id="export-status"></div>
+    </div>
+
+    <div class="card" id="export-result-card" style="display:none;">
+      <div class="card-title">Your track list — ready to paste into Claude</div>
+      <div class="instruction">
+        <strong>What to do:</strong><br>
+        1. Tap <strong>Copy to clipboard</strong> below<br>
+        2. Open a new Claude chat (or use this one)<br>
+        3. Paste and send — Claude will return a numbered list<br>
+        4. Come back here and tap <strong>② Import</strong> to paste Claude's response
+      </div>
+      <div class="export-box" id="export-box"></div>
+      <button class="btn btn-accent" onclick="copyExport()" style="margin-top:14px;">Copy to clipboard</button>
+      <button class="btn btn-outline" onclick="switchTab('import')" style="margin-top:8px;">Go to ② Import →</button>
+      <div class="status" id="copy-status"></div>
+    </div>
+
+  </div>
+
+  <!-- ── IMPORT TAB ── -->
+  <div id="panel-import" style="display:none;">
+    <div class="card">
+      <div class="card-title">Paste Claude's response</div>
+      <div class="instruction">
+        Paste Claude's full response here. It should contain a numbered or JSON list of songs. The app will extract the track IDs and create the playlist in Spotify automatically.
+      </div>
+      <textarea id="import-text" placeholder="Paste Claude's response here…" style="margin-top:14px;"></textarea>
+      <button class="btn btn-accent" id="import-btn" onclick="doImport()">Create Playlist in Spotify</button>
+      <div class="status" id="import-status"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ RESULT ══ -->
+<div id="view-result" class="view">
+  <div class="card">
+    <div class="success-hl">✓ Playlist created in Spotify</div>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:4px;" id="result-summary"></p>
+    <hr class="divider">
+    <div class="track-list" id="result-tracks"></div>
+    <hr class="divider">
+    <button class="btn btn-accent" onclick="buildAnother()">Build another playlist</button>
+  </div>
+</div>
+
+
+<script>
+// ══════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════
+const CLIENT_ID    = '733d1a3fe7a94d48a0310c726f468b7a';
+const REDIRECT_URI = 'https://patrycka.github.io/playlist-builder/';
+const SCOPES       = 'playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-read-private';
+const AVG_SECS     = 210;
+
+const CATEGORIES = [
+  { key:'MPB', label:'🔥 Mainstream Party Bangers' },
+  { key:'FFP', label:'🕺 Fun/Funkier Party Bangers' },
+  { key:'SRG', label:'🎵 Safe and Reliable Groovers' },
+  { key:'UFG', label:'🌟 Uplifting/Feel-Good Pop' },
+  { key:'SAS', label:'🌙 Slow & Sensual' },
+  { key:'EAH', label:'💔 Emotional & Heartfelt' },
+  { key:'ASF', label:'🎸 Acoustic & Stripped — More Familiar' },
+  { key:'ASL', label:'🎸 Acoustic & Stripped — Less Familiar' },
+  { key:'HDD', label:'🎚️ Heavy Downbeat/Dubstep' },
+];
+
+// ══════════════════════════════════════════════════════
+// STORAGE
+// ══════════════════════════════════════════════════════
+const S = {
+  get:     k => localStorage.getItem(k),
+  set:     (k,v) => localStorage.setItem(k,v),
+  del:     k => localStorage.removeItem(k),
+  getJSON: k => { try{return JSON.parse(localStorage.getItem(k))}catch{return null} },
+  setJSON: (k,v) => localStorage.setItem(k,JSON.stringify(v)),
+};
+
+// In-memory cache of category tracks loaded this session
+let catCache = {};
+let lastExportPool = []; // track pool used for most recent export
+let lastPlaylistName = '';
+
+// ══════════════════════════════════════════════════════
+// VIEWS & TABS
+// ══════════════════════════════════════════════════════
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  if (name === 'settings') prefillSettings();
+}
+
+function setStatus(id, msg, type='') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+function switchTab(tab) {
+  document.getElementById('panel-export').style.display = tab==='export' ? 'block' : 'none';
+  document.getElementById('panel-import').style.display = tab==='import' ? 'block' : 'none';
+  document.getElementById('tab-export').className = 'step' + (tab==='export' ? ' active' : ' done');
+  document.getElementById('tab-import').className = 'step' + (tab==='import' ? ' active' : '');
+}
+
+// ══════════════════════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════════════════════
+function prefillSettings() {
+  const cid = S.get('spotify_client_id') || CLIENT_ID;
+  document.getElementById('s-client-id').value = cid;
+  const token = getToken();
+  const user  = S.get('spotify_display');
+  const dot   = document.getElementById('settings-dot');
+  const label = document.getElementById('settings-user');
+  if (token && user) {
+    dot.classList.add('on');
+    label.textContent = user + ' · Connected';
+    document.getElementById('settings-auth-btn').textContent = 'Reconnect Spotify';
+  } else {
+    dot.classList.remove('on');
+    label.textContent = 'Not connected';
+    document.getElementById('settings-auth-btn').textContent = 'Connect Spotify';
+  }
+}
+
+function saveSettings() {
+  const cid = document.getElementById('s-client-id').value.trim();
+  if (!cid) { setStatus('settings-status','Enter your Client ID.','error'); return; }
+  S.set('spotify_client_id', cid);
+  setStatus('settings-status','Saved ✓','success');
+}
+
+// ══════════════════════════════════════════════════════
+// SPOTIFY PKCE AUTH
+// ══════════════════════════════════════════════════════
+function rand(n) {
+  const a='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const b=new Uint8Array(n); crypto.getRandomValues(b);
+  return Array.from(b).map(x=>a[x%a.length]).join('');
+}
+async function sha256(s) {
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+}
+function b64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+async function startSpotifyAuth() {
+  const clientId = S.get('spotify_client_id') || CLIENT_ID;
+  const verifier = rand(64);
+  S.set('pkce_verifier', verifier);
+  const challenge = b64url(await sha256(verifier));
+  const p = new URLSearchParams({
+    client_id: clientId, response_type:'code',
+    redirect_uri: REDIRECT_URI, scope: SCOPES,
+    code_challenge_method:'S256', code_challenge: challenge,
+  });
+  window.location = 'https://accounts.spotify.com/authorize?' + p;
+}
+
+async function handleCallback(code) {
+  const clientId = S.get('spotify_client_id') || CLIENT_ID;
+  const verifier = S.get('pkce_verifier');
+  try {
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        client_id:clientId, grant_type:'authorization_code',
+        code, redirect_uri:REDIRECT_URI, code_verifier:verifier,
+      }),
+    });
+    const d = await res.json();
+    if (!d.access_token) throw new Error(d.error_description||'Token error');
+    S.set('spotify_token', d.access_token);
+    S.set('spotify_expires', Date.now() + d.expires_in*1000);
+    if (d.refresh_token) S.set('spotify_refresh', d.refresh_token);
+    S.del('pkce_verifier');
+    window.history.replaceState({}, '', REDIRECT_URI);
+    await loadMainView();
+  } catch(e) {
+    showView('auth');
+    setStatus('auth-status','Auth failed: '+e.message,'error');
+  }
+}
+
+function getToken() {
+  const t = S.get('spotify_token');
+  const e = S.get('spotify_expires');
+  return (t && Date.now() < Number(e)) ? t : null;
+}
+
+function disconnectSpotify() {
+  ['spotify_token','spotify_expires','spotify_refresh','spotify_display','spotify_user_id']
+    .forEach(k => S.del(k));
+  catCache = {};
+  showView('setup');
+}
+
+// ══════════════════════════════════════════════════════
+// SPOTIFY API
+// ══════════════════════════════════════════════════════
+async function spFetch(path, opts={}) {
+  const token = getToken();
+  if (!token) { showView('auth'); throw new Error('Session expired'); }
+  const url = path.startsWith('http') ? path : 'https://api.spotify.com/v1'+path;
+  const res = await fetch(url, {
+    ...opts,
+    headers:{
+      Authorization:'Bearer '+token,
+      'Content-Type':'application/json',
+      ...(opts.headers||{}),
+    },
+  });
+  if (res.status===401) { disconnectSpotify(); throw new Error('Session expired — reconnect Spotify.'); }
+  if (!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.error?.message || 'Spotify error '+res.status);
+  }
+  return res.status===204 ? {} : res.json();
+}
+
+async function getAllPlaylists() {
+  let items=[], url='/me/playlists?limit=50';
+  while(url) {
+    const d = await spFetch(url);
+    items = items.concat(d.items||[]);
+    url = d.next || null;
+  }
+  return items;
+}
+
+async function getPlaylistTracks(pid) {
+  let tracks=[], url=`/playlists/${pid}/tracks?limit=100&fields=next,items(track(id,name,artists,duration_ms))`;
+  while(url) {
+    const d = await spFetch(url);
+    const valid = (d.items||[]).filter(i=>i.track&&i.track.id);
+    tracks = tracks.concat(valid.map(i=>({
+      id:      i.track.id,
+      name:    i.track.name,
+      artist:  i.track.artists.map(a=>a.name).join(', '),
+      dur:     Math.round((i.track.duration_ms||210000)/1000),
+    })));
+    url = d.next||null;
+  }
+  return tracks;
+}
+
+async function createPlaylist(userId, name, ids) {
+  const pl = await spFetch(`/users/${userId}/playlists`, {
+    method:'POST',
+    body:JSON.stringify({name, public:false, description:'Built by Playlist Builder'}),
+  });
+  for(let i=0;i<ids.length;i+=100) {
+    const batch = ids.slice(i,i+100).map(id=>`spotify:track:${id}`);
+    await spFetch(`/playlists/${pl.id}/tracks`, {
+      method:'POST', body:JSON.stringify({uris:batch}),
+    });
+  }
+  return pl;
+}
+
+// ══════════════════════════════════════════════════════
+// MAIN VIEW
+// ══════════════════════════════════════════════════════
+async function loadMainView() {
+  showView('main');
+  try {
+    const me = await spFetch('/me');
+    S.set('spotify_user_id', me.id);
+    S.set('spotify_display', me.display_name||me.id);
+    document.getElementById('spotify-user-label').textContent =
+      (me.display_name||me.id) + ' · Spotify';
+  } catch(e){}
+  await loadCategoryPlaylists();
+}
+
+async function loadCategoryPlaylists() {
+  const list = document.getElementById('category-list');
+  list.innerHTML = '';
+  setStatus('cat-status','Loading your Spotify playlists…');
+  try {
+    const all = await getAllPlaylists();
+
+    for(const cat of CATEGORIES) {
+      // Flexible name matching
+      const match = all.find(p => {
+        const pn = p.name.toLowerCase().replace(/[^a-z0-9]/g,' ').trim();
+        const cn = cat.label.replace(/[^\x00-\x7F]/g,'').toLowerCase().replace(/[^a-z0-9]/g,' ').trim();
+        // Match on key words
+        const words = cn.split(' ').filter(w=>w.length>3);
+        return words.filter(w=>pn.includes(w)).length >= Math.min(2, words.length);
+      });
+
+      const item = document.createElement('label');
+      item.className = 'cat-item' + (!match ? ' unavailable' : '');
+      item.dataset.key = cat.key;
+      item.dataset.pid = match?.id || '';
+      item.dataset.count = match?.tracks?.total || 0;
+      item.innerHTML = `
+        <input type="checkbox" data-key="${cat.key}" ${!match?'disabled':''}>
+        <div class="cat-check"></div>
+        <span class="cat-label">${cat.label}</span>
+        <span class="cat-count">${match ? (match.tracks?.total||'?')+' tracks' : 'not in Spotify'}</span>`;
+
+      if(match) {
+        item.addEventListener('click', ()=>{
+          item.classList.toggle('selected');
+          item.querySelector('input').checked = item.classList.contains('selected');
+        });
+      }
+      list.appendChild(item);
+    }
+    setStatus('cat-status','');
+  } catch(e) {
+    setStatus('cat-status','Error: '+e.message,'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// EXPORT — build the prompt for Claude
+// ══════════════════════════════════════════════════════
+async function doExport() {
+  const selectedItems = [...document.querySelectorAll('.cat-item.selected')];
+  if(!selectedItems.length) {
+    setStatus('export-status','Select at least one category playlist.','error');
+    return;
+  }
+
+  const name  = document.getElementById('playlist-name').value.trim();
+  const vibe  = document.getElementById('vibe-description').value.trim();
+  const mins  = parseInt(document.getElementById('duration').value);
+
+  if(!name) { setStatus('export-status','Give the playlist a name.','error'); return; }
+  if(!vibe) { setStatus('export-status','Describe the vibe.','error'); return; }
+
+  const btn = document.getElementById('export-btn');
+  btn.disabled = true;
+  lastPlaylistName = name;
+
+  try {
+    // Load tracks for each selected category
+    const pool = [];
+    const seen = new Set();
+
+    for(const item of selectedItems) {
+      const key = item.dataset.key;
+      const pid = item.dataset.pid;
+      if(!pid) continue;
+
+      setStatus('export-status', `Loading ${CATEGORIES.find(c=>c.key===key)?.label||key}…`);
+
+      if(!catCache[key]) {
+        catCache[key] = await getPlaylistTracks(pid);
+      }
+
+      for(const t of catCache[key]) {
+        if(!seen.has(t.id)) {
+          seen.add(t.id);
+          pool.push({...t, cat: key});
+        }
+      }
+    }
+
+    if(!pool.length) {
+      setStatus('export-status','No tracks found.','error');
+      btn.disabled = false;
+      return;
+    }
+
+    lastExportPool = pool;
+    const targetTracks = Math.round((mins*60)/AVG_SECS);
+
+    // Build the prompt text
+    const prompt = [
+      `I need you to build a Spotify playlist for me from my personal track pool.`,
+      ``,
+      `PLAYLIST NAME: ${name}`,
+      `DURATION: ${mins} minutes (select approximately ${targetTracks} tracks, assuming ~3.5 min average)`,
+      ``,
+      `BRIEF:`,
+      vibe,
+      ``,
+      `RULES:`,
+      `- Never place two songs by the same artist consecutively`,
+      `- Avoid large BPM jumps between adjacent songs — use your knowledge of each song to sequence smoothly`,
+      `- Songs can only be used once`,
+      `- Draw from across the categories provided, not just the obvious picks`,
+      ``,
+      `TRACK POOL (${pool.length} songs):`,
+      `Format: SPOTIFY_ID | Track Name | Artist | Category`,
+      ``,
+      ...pool.map(t=>`${t.id} | ${t.name} | ${t.artist} | ${t.cat}`),
+      ``,
+      `Please return your answer as a JSON array only — no explanation, no markdown fences, just the raw JSON array.`,
+      `Each element: { "id": "<spotify_id>", "name": "<track name>", "artist": "<artist>", "phase": "<phase label e.g. Opening, Peak 1, Valley, Wind-down>" }`,
+    ].join('\n');
+
+    // Show result
+    document.getElementById('export-box').textContent = prompt;
+    document.getElementById('export-result-card').style.display = 'block';
+    setStatus('export-status','');
+
+    // Scroll to result
+    document.getElementById('export-result-card').scrollIntoView({behavior:'smooth',block:'start'});
+
+  } catch(e) {
+    setStatus('export-status', e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function copyExport() {
+  const text = document.getElementById('export-box').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus('copy-status','Copied ✓','success');
+    setTimeout(()=>setStatus('copy-status',''), 2500);
+  } catch(e) {
+    setStatus('copy-status','Copy failed — select text manually.','error');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// IMPORT — parse Claude's response & create playlist
+// ══════════════════════════════════════════════════════
+async function doImport() {
+  const raw = document.getElementById('import-text').value.trim();
+  if(!raw) { setStatus('import-status','Paste Claude\'s response first.','error'); return; }
+
+  const btn = document.getElementById('import-btn');
+  btn.disabled = true;
+  setStatus('import-status','Parsing response…');
+
+  try {
+    // Try to extract JSON array from response
+    let tracks = null;
+
+    // Attempt 1: direct JSON parse
+    try { tracks = JSON.parse(raw); } catch{}
+
+    // Attempt 2: extract JSON array from within text
+    if(!tracks || !Array.isArray(tracks)) {
+      const match = raw.match(/\[[\s\S]*\]/);
+      if(match) { try { tracks = JSON.parse(match[0]); } catch{} }
+    }
+
+    // Attempt 3: parse numbered list format
+    // e.g. "1. Track Name — Artist (spotify_id)" or lines with spotify IDs
+    if(!tracks || !Array.isArray(tracks)) {
+      tracks = parseNumberedList(raw);
+    }
+
+    if(!tracks || !tracks.length) {
+      throw new Error('Could not parse response. Make sure you pasted Claude\'s full reply.');
+    }
+
+    // Validate/enrich from pool
+    const poolMap = Object.fromEntries(lastExportPool.map(t=>[t.id, t]));
+    const enriched = tracks.map(t => {
+      const poolTrack = poolMap[t.id];
+      return {
+        id:     t.id,
+        name:   t.name   || poolTrack?.name   || t.id,
+        artist: t.artist || poolTrack?.artist || '',
+        phase:  t.phase  || '',
+      };
+    }).filter(t => t.id && t.id.length > 5);
+
+    if(!enriched.length) throw new Error('No valid Spotify track IDs found in response.');
+
+    // Create the playlist
+    const name   = lastPlaylistName || document.getElementById('playlist-name').value.trim() || 'My Playlist';
+    const userId = S.get('spotify_user_id');
+    if(!userId) throw new Error('Not connected to Spotify — reconnect and try again.');
+
+    setStatus('import-status','Creating playlist in Spotify…');
+    const ids = enriched.map(t=>t.id);
+    await createPlaylist(userId, name, ids);
+
+    // Show result view
+    const resultList = document.getElementById('result-tracks');
+    resultList.innerHTML = '';
+    enriched.forEach((t,i) => {
+      const row = document.createElement('div');
+      row.className = 'track-row';
+      row.innerHTML = `
+        <span class="track-num">${i+1}</span>
+        <div class="track-info">
+          <div class="track-name">${t.name}</div>
+          <div class="track-artist">${t.artist}</div>
+        </div>
+        <span class="phase-tag">${t.phase}</span>`;
+      resultList.appendChild(row);
+    });
+
+    document.getElementById('result-summary').textContent =
+      `"${name}" · ${enriched.length} tracks · now in your Spotify library.`;
+
+    showView('result');
+
+  } catch(e) {
+    setStatus('import-status', e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function parseNumberedList(text) {
+  // Look for Spotify track IDs (22 char alphanumeric strings)
+  const idRegex = /\b([A-Za-z0-9]{22})\b/g;
+  const lines = text.split('\n');
+  const results = [];
+
+  for(const line of lines) {
+    const idMatch = line.match(/\b([A-Za-z0-9]{22})\b/);
+    if(idMatch) {
+      // Try to get name/artist from the line
+      const clean = line.replace(idMatch[0],'').replace(/^\d+[\.\)]\s*/,'').trim();
+      const parts = clean.split(/\s*[—–|-]\s*/);
+      results.push({
+        id:     idMatch[1],
+        name:   parts[0]?.trim() || '',
+        artist: parts[1]?.trim() || '',
+        phase:  parts[2]?.trim() || '',
+      });
+    }
+  }
+  return results.length ? results : null;
+}
+
+// ══════════════════════════════════════════════════════
+// MISC
+// ══════════════════════════════════════════════════════
+function buildAnother() {
+  document.getElementById('import-text').value = '';
+  document.getElementById('export-result-card').style.display = 'none';
+  showView('main');
+  switchTab('export');
+}
+
+// ══════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════
+async function init() {
+  // Always store the hardcoded client ID
+  S.set('spotify_client_id', CLIENT_ID);
+
+  // Handle OAuth callback
+  const params = new URLSearchParams(window.location.search);
+  if(params.get('code')) {
+    await handleCallback(params.get('code'));
+    return;
+  }
+
+  if(getToken()) {
+    await loadMainView();
+  } else {
+    showView('setup');
+  }
+}
+
+window.addEventListener('load', init);
+</script>
+</body>
+</html>
