@@ -493,15 +493,15 @@ const SCOPES       = 'playlist-read-private playlist-read-collaborative playlist
 const AVG_SECS     = 210;
 
 const CATEGORIES = [
-  { key:'MPB', label:'🔥 Mainstream Party Bangers' },
-  { key:'FFP', label:'🕺 Fun/Funkier Party Bangers' },
-  { key:'SRG', label:'🎵 Safe and Reliable Groovers' },
-  { key:'UFG', label:'🌟 Uplifting/Feel-Good Pop' },
-  { key:'SAS', label:'🌙 Slow & Sensual' },
-  { key:'EAH', label:'💔 Emotional & Heartfelt' },
-  { key:'ASF', label:'🎸 Acoustic & Stripped — More Familiar' },
-  { key:'ASL', label:'🎸 Acoustic & Stripped — Less Familiar' },
-  { key:'HDD', label:'🎚️ Heavy Downbeat/Dubstep' },
+  { key:'MPB', label:'🔥 Mainstream Party Bangers',              spotifyName:'01 Mainstream Party Bangers' },
+  { key:'FFP', label:'🕺 Fun/Funkier Party Bangers',             spotifyName:'02 Fun Funkier Party Bangers' },
+  { key:'SRG', label:'🎵 Safe and Reliable Groovers',            spotifyName:'03 Safe and Reliable Groovers' },
+  { key:'UFG', label:'🌟 Uplifting/Feel-Good Pop',               spotifyName:'04 Uplifting Feel-Good Pop' },
+  { key:'SAS', label:'🌙 Slow & Sensual',                        spotifyName:'05 Slow and Sensual' },
+  { key:'EAH', label:'💔 Emotional & Heartfelt',                 spotifyName:'06 Emotional and Heartfelt' },
+  { key:'ASL', label:'🎸 Acoustic & Stripped — Less Challenging', spotifyName:'07 Acoustic Stripped Less Challenging' },
+  { key:'ASF', label:'🎸 Acoustic & Stripped — More Challenging', spotifyName:'08 Acoustic Stripped More Challenging' },
+  { key:'HDD', label:'🎚️ Heavy Downbeat/Dubstep',               spotifyName:'09 Heavy Downbeat Dubstep' },
 ];
 
 // ══════════════════════════════════════════════════════
@@ -725,14 +725,9 @@ async function loadCategoryPlaylists() {
     const all = await getAllPlaylists();
 
     for(const cat of CATEGORIES) {
-      // Flexible name matching
-      const match = all.find(p => {
-        const pn = p.name.toLowerCase().replace(/[^a-z0-9]/g,' ').trim();
-        const cn = cat.label.replace(/[^\x00-\x7F]/g,'').toLowerCase().replace(/[^a-z0-9]/g,' ').trim();
-        // Match on key words
-        const words = cn.split(' ').filter(w=>w.length>3);
-        return words.filter(w=>pn.includes(w)).length >= Math.min(2, words.length);
-      });
+      // Exact match (case-insensitive, trimmed) against known Spotify playlist name
+      const target = cat.spotifyName.toLowerCase().trim();
+      const match = all.find(p => p.name.toLowerCase().trim() === target);
 
       const item = document.createElement('label');
       item.className = 'cat-item' + (!match ? ' unavailable' : '');
