@@ -782,7 +782,7 @@ async function doExport() {
     // Load tracks for each selected category
     const pool = [];
     const seen = new Set();
-    const failedCats = [];
+    const failedCats = []; // { label, reason }
 
     for(const item of selectedItems) {
       const key = item.dataset.key;
@@ -804,16 +804,15 @@ async function doExport() {
         }
       } catch(e) {
         console.error(`Failed to load ${catLabel}:`, e);
-        failedCats.push(catLabel);
+        failedCats.push({ label: catLabel, reason: e.message });
       }
     }
 
-    if(failedCats.length) {
-      setStatus('export-status', `⚠ Skipped (couldn't read): ${failedCats.join(', ')}. Continuing with the rest…`, 'error');
-    }
-
     if(!pool.length) {
-      setStatus('export-status','No tracks could be loaded from any selected playlist.','error');
+      const detail = failedCats.length
+        ? failedCats.map(f => `${f.label}: ${f.reason}`).join(' | ')
+        : 'No tracks found in selected playlists.';
+      setStatus('export-status', detail, 'error');
       btn.disabled = false;
       return;
     }
@@ -850,7 +849,7 @@ async function doExport() {
     document.getElementById('export-box').textContent = prompt;
     document.getElementById('export-result-card').style.display = 'block';
     if(failedCats.length) {
-      setStatus('export-status', `⚠ Note: couldn't read ${failedCats.join(', ')} — proceeded without them.`, 'error');
+      setStatus('export-status', `⚠ Note: couldn't read ${failedCats.map(f=>f.label).join(', ')} — proceeded without them.`, 'error');
     } else {
       setStatus('export-status','');
     }
