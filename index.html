@@ -354,8 +354,13 @@
     <div class="card-title">Settings</div>
     <label>Spotify Client ID</label>
     <input type="text" id="s-client-id" placeholder="733d1a3fe7a94d48a0310c726f468b7a">
+
+    <label>GetSongBPM API Key <span style="color:var(--muted);font-weight:400;">(free — <a href="https://getsongbpm.com/api" target="_blank" style="color:var(--accent);">sign up here</a>)</span></label>
+    <input type="text" id="s-bpm-key" placeholder="Your GetSongBPM API key">
+
     <button class="btn btn-accent" onclick="saveSettings()">Save</button>
     <div class="status" id="settings-status"></div>
+    <p style="font-size:11px;color:var(--muted);margin-top:8px;">BPM data powered by <a href="https://getsongbpm.com" target="_blank" style="color:var(--muted);text-decoration:underline;">GetSongBPM.com</a></p>
     <hr class="divider">
     <div class="spotify-bar">
       <div class="dot" id="settings-dot"></div>
@@ -437,6 +442,7 @@
 
       <button class="btn btn-accent" id="export-btn" onclick="doExport()">Generate Track List for Claude</button>
       <div class="status" id="export-status"></div>
+      <p style="font-size:12px;color:var(--muted);margin-top:8px;">First run looks up real BPM for every song (~1 min for your full library) — cached instantly after that.</p>
     </div>
 
     <div class="card" id="export-result-card" style="display:none;">
@@ -492,6 +498,66 @@ const CLIENT_ID    = '733d1a3fe7a94d48a0310c726f468b7a';
 const REDIRECT_URI = 'https://patrycka.github.io/playlist-builder/';
 const SCOPES       = 'playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-read-private';
 const AVG_SECS     = 210;
+
+// ══════════════════════════════════════════════════════
+// BPM LOOKUP — GetSongBPM API with local caching
+// ══════════════════════════════════════════════════════
+function bpmCacheKey(name, artist) {
+  return (artist + '|' + name).toLowerCase().replace(/[^a-z0-9|]/g,'').slice(0,150);
+}
+
+function getCachedBpm(name, artist) {
+  const cache = S.getJSON('bpm_cache') || {};
+  return cache[bpmCacheKey(name, artist)];
+}
+
+function setCachedBpm(name, artist, bpm) {
+  const cache = S.getJSON('bpm_cache') || {};
+  cache[bpmCacheKey(name, artist)] = bpm;
+  S.setJSON('bpm_cache', cache);
+}
+
+async function lookupBpm(name, artist) {
+  // Check cache first (persists across sessions)
+  const cached = getCachedBpm(name, artist);
+  if (cached !== undefined) return cached;
+
+  const apiKey = S.get('bpm_api_key');
+  if (!apiKey) return null;
+
+  // Clean up track name for better search matching (strip remix/version tags)
+  const cleanName = name.replace(/\s*[-–—(\[].*$/, '').trim() || name;
+  const primaryArtist = artist.split(',')[0].trim();
+
+  try {
+    const query = `song:${cleanName} artist:${primaryArtist}`;
+    const url = `https://api.getsong.co/search/?api_key=${encodeURIComponent(apiKey)}&type=both&lookup=${encodeURIComponent(query)}`;
+    const res = await fetch(url);
+    if (!res.ok) { setCachedBpm(name, artist, null); return null; }
+    const data = await res.json();
+    const first = Array.isArray(data.search) ? data.search[0] : null;
+    const bpm = first?.tempo ? Math.round(parseFloat(first.tempo)) : null;
+    setCachedBpm(name, artist, bpm);
+    return bpm;
+  } catch(e) {
+    setCachedBpm(name, artist, null);
+    return null;
+  }
+}
+
+async function lookupBpmForPool(pool, onProgress) {
+  let done = 0;
+  const results = [];
+  for (const track of pool) {
+    const bpm = await lookupBpm(track.name, track.artist);
+    results.push({ ...track, bpm });
+    done++;
+    if (onProgress) onProgress(done, pool.length);
+    // Small delay to be gentle on the free API
+    await new Promise(r => setTimeout(r, 120));
+  }
+  return results;
+}
 
 const CATEGORIES = [
   { key:'MPB', label:'🔥 Mainstream Party Bangers',              spotifyName:'01 Mainstream Party Bangers' },
@@ -550,6 +616,7 @@ function switchTab(tab) {
 function prefillSettings() {
   const cid = S.get('spotify_client_id') || CLIENT_ID;
   document.getElementById('s-client-id').value = cid;
+  document.getElementById('s-bpm-key').value = S.get('bpm_api_key') || '';
   const token = getToken();
   const user  = S.get('spotify_display');
   const dot   = document.getElementById('settings-dot');
@@ -572,8 +639,10 @@ function prefillSettings() {
 
 function saveSettings() {
   const cid = document.getElementById('s-client-id').value.trim();
+  const bpmKey = document.getElementById('s-bpm-key').value.trim();
   if (!cid) { setStatus('settings-status','Enter your Client ID.','error'); return; }
   S.set('spotify_client_id', cid);
+  S.set('bpm_api_key', bpmKey);
   setStatus('settings-status','Saved ✓','success');
 }
 
@@ -827,6 +896,20 @@ async function doExport() {
     lastExportPool = pool;
     const targetTracks = Math.round((mins*60)/AVG_SECS);
 
+    // Look up verified BPM for every track (cached — instant on repeat runs)
+    const bpmKey = S.get('bpm_api_key');
+    let poolWithBpm = pool;
+    if (bpmKey) {
+      poolWithBpm = await lookupBpmForPool(pool, (done, total) => {
+        setStatus('export-status', `Looking up verified BPM: ${done}/${total} tracks…`);
+      });
+      lastExportPool = poolWithBpm;
+    } else {
+      setStatus('export-status', 'No GetSongBPM key set — skipping BPM lookup (add one in Settings for accurate tempo data).');
+    }
+
+    const knownBpmCount = poolWithBpm.filter(t => t.bpm).length;
+
     // Build the prompt text
     const prompt = [
       `I need you to build a Spotify playlist for me from my personal track pool.`,
@@ -839,17 +922,18 @@ async function doExport() {
       ``,
       `RULES:`,
       `- Never place two songs by the same artist consecutively`,
-      `- Avoid large BPM jumps between adjacent songs — use your knowledge of each song to sequence smoothly`,
+      `- Sequence smoothly using the VERIFIED BPM figures provided — avoid large jumps between adjacent songs`,
+      `- Where a BPM is marked "unknown", use your own knowledge cautiously and mention any uncertainty is possible`,
       `- Songs can only be used once`,
       `- Draw from across the categories provided, not just the obvious picks`,
       ``,
-      `TRACK POOL (${pool.length} songs):`,
-      `Format: SPOTIFY_ID | Track Name | Artist | Category`,
+      `TRACK POOL (${poolWithBpm.length} songs, ${knownBpmCount} with verified BPM from GetSongBPM.com):`,
+      `Format: SPOTIFY_ID | Track Name | Artist | Category | BPM`,
       ``,
-      ...pool.map(t=>`${t.id} | ${t.name} | ${t.artist} | ${t.cat}`),
+      ...poolWithBpm.map(t=>`${t.id} | ${t.name} | ${t.artist} | ${t.cat} | ${t.bpm || 'unknown'}`),
       ``,
       `Please return your answer as a JSON array only — no explanation, no markdown fences, just the raw JSON array.`,
-      `Each element: { "id": "<spotify_id>", "name": "<track name>", "artist": "<artist>", "phase": "<phase label e.g. Opening, Peak 1, Valley, Wind-down>" }`,
+      `Each element: { "id": "<spotify_id>", "name": "<track name>", "artist": "<artist>", "bpm": <number or null>, "phase": "<phase label e.g. Opening, Peak 1, Valley, Wind-down>" }`,
     ].join('\n');
 
     // Show result
@@ -857,6 +941,8 @@ async function doExport() {
     document.getElementById('export-result-card').style.display = 'block';
     if(failedCats.length) {
       setStatus('export-status', `⚠ Note: couldn't read ${failedCats.map(f=>f.label).join(', ')} — proceeded without them.`, 'error');
+    } else if (bpmKey) {
+      setStatus('export-status', `✓ BPM verified for ${knownBpmCount}/${poolWithBpm.length} tracks.`, 'success');
     } else {
       setStatus('export-status','');
     }
