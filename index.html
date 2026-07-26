@@ -937,7 +937,8 @@ async function doImport() {
 
     setStatus('import-status','Creating playlist in Spotify…');
     const ids = enriched.map(t=>t.id);
-    await createPlaylist(userId, name, ids);
+    const createdPlaylist = await createPlaylist(userId, name, ids);
+    console.log('Created playlist response:', createdPlaylist);
 
     // Show result view
     const resultList = document.getElementById('result-tracks');
@@ -955,8 +956,17 @@ async function doImport() {
       resultList.appendChild(row);
     });
 
-    document.getElementById('result-summary').textContent =
-      `"${name}" · ${enriched.length} tracks · now in your Spotify library.`;
+    const playlistUrl = createdPlaylist?.external_urls?.spotify || '';
+    const playlistId   = createdPlaylist?.id || '(no id returned)';
+    const ownerName    = createdPlaylist?.owner?.display_name || createdPlaylist?.owner?.id || '(unknown)';
+
+    document.getElementById('result-summary').innerHTML =
+      `"${name}" · ${enriched.length} tracks<br>` +
+      `Playlist ID: <span style="color:var(--accent)">${playlistId}</span><br>` +
+      `Owner: ${ownerName}<br>` +
+      (playlistUrl
+        ? `<a href="${playlistUrl}" target="_blank" style="color:var(--spotify);font-weight:600;">Open directly in Spotify →</a>`
+        : `<span style="color:var(--danger)">⚠ No Spotify URL returned — something may have gone wrong.</span>`);
 
     showView('result');
 
