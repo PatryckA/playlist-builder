@@ -361,6 +361,7 @@
       <div class="dot" id="settings-dot"></div>
       <span id="settings-user">Not connected to Spotify</span>
     </div>
+    <div class="export-box" id="scope-debug" style="margin-top:10px;"></div>
     <button class="btn btn-spotify" id="settings-auth-btn" onclick="startSpotifyAuth()" style="margin-top:14px;">Connect Spotify</button>
     <button class="btn btn-ghost" onclick="disconnectSpotify()" style="margin-top:8px;">Disconnect Spotify</button>
   </div>
@@ -553,6 +554,7 @@ function prefillSettings() {
   const user  = S.get('spotify_display');
   const dot   = document.getElementById('settings-dot');
   const label = document.getElementById('settings-user');
+  const scopeDebug = document.getElementById('scope-debug');
   if (token && user) {
     dot.classList.add('on');
     label.textContent = user + ' · Connected';
@@ -562,6 +564,10 @@ function prefillSettings() {
     label.textContent = 'Not connected';
     document.getElementById('settings-auth-btn').textContent = 'Connect Spotify';
   }
+  const grantedScope = S.get('spotify_granted_scope');
+  scopeDebug.textContent = grantedScope
+    ? 'Granted scopes:\n' + grantedScope.split(' ').join('\n')
+    : 'No scope info yet — connect Spotify to see it here.';
 }
 
 function saveSettings() {
@@ -616,6 +622,7 @@ async function handleCallback(code) {
     if (!d.access_token) throw new Error(d.error_description||'Token error');
     S.set('spotify_token', d.access_token);
     S.set('spotify_expires', Date.now() + d.expires_in*1000);
+    S.set('spotify_granted_scope', d.scope || '(none returned by Spotify)');
     if (d.refresh_token) S.set('spotify_refresh', d.refresh_token);
     S.del('pkce_verifier');
     window.history.replaceState({}, '', REDIRECT_URI);
