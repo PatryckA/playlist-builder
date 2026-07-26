@@ -738,10 +738,11 @@ async function loadCategoryPlaylists() {
         <input type="checkbox" data-key="${cat.key}" ${!match?'disabled':''}>
         <div class="cat-check"></div>
         <span class="cat-label">${cat.label}</span>
-        <span class="cat-count">${match ? (match.tracks?.total||'?')+' tracks' : 'not in Spotify'}</span>`;
+        <span class="cat-count">${match ? (match.tracks?.total ?? '?')+' tracks' : 'not in Spotify'}</span>`;
 
       if(match) {
-        item.addEventListener('click', ()=>{
+        item.addEventListener('click', (e)=>{
+          e.preventDefault();
           item.classList.toggle('selected');
           item.querySelector('input').checked = item.classList.contains('selected');
         });
