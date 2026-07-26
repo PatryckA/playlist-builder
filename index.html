@@ -682,15 +682,15 @@ async function getAllPlaylists() {
 }
 
 async function getPlaylistTracks(pid) {
-  let tracks=[], url=`/playlists/${pid}/tracks?limit=100`;
+  let tracks=[], url=`/playlists/${pid}/items?limit=100`;
   while(url) {
     const d = await spFetch(url);
-    const valid = (d.items||[]).filter(i => i.track && i.track.id && !i.is_local && !i.track.is_local);
+    const valid = (d.items||[]).filter(i => i.item && i.item.id && !i.is_local && !i.item.is_local);
     tracks = tracks.concat(valid.map(i=>({
-      id:      i.track.id,
-      name:    i.track.name,
-      artist:  (i.track.artists||[]).map(a=>a.name).join(', '),
-      dur:     Math.round((i.track.duration_ms||210000)/1000),
+      id:      i.item.id,
+      name:    i.item.name,
+      artist:  (i.item.artists||[]).map(a=>a.name).join(', '),
+      dur:     Math.round((i.item.duration_ms||210000)/1000),
     })));
     url = d.next || null;
   }
@@ -698,13 +698,13 @@ async function getPlaylistTracks(pid) {
 }
 
 async function createPlaylist(userId, name, ids) {
-  const pl = await spFetch(`/users/${userId}/playlists`, {
+  const pl = await spFetch(`/me/playlists`, {
     method:'POST',
     body:JSON.stringify({name, public:false, description:'Built by Playlist Builder'}),
   });
   for(let i=0;i<ids.length;i+=100) {
     const batch = ids.slice(i,i+100).map(id=>`spotify:track:${id}`);
-    await spFetch(`/playlists/${pl.id}/tracks`, {
+    await spFetch(`/playlists/${pl.id}/items`, {
       method:'POST', body:JSON.stringify({uris:batch}),
     });
   }
