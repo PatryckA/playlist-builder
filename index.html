@@ -656,14 +656,16 @@ async function spFetch(path, opts={}) {
   });
   if (res.status===401) { disconnectSpotify(); throw new Error('Session expired — reconnect Spotify.'); }
   if (!res.ok) {
-    const err = await res.json().catch(()=>({}));
-    throw new Error(err.error?.message || 'Spotify error '+res.status);
+    const bodyText = await res.text();
+    let detail = bodyText;
+    try { detail = JSON.parse(bodyText).error?.message || bodyText; } catch{}
+    throw new Error(`Spotify ${res.status} on ${path.split('?')[0]}: ${detail}`);
   }
   return res.status===204 ? {} : res.json();
 }
 
 async function getAllPlaylists() {
-  let items=[], url='/me/playlists?limit=50';
+  let items=[], url='/me/playlists?limit=50&fields=items(id,name,tracks.total),next';
   while(url) {
     const d = await spFetch(url);
     items = items.concat(d.items||[]);
