@@ -408,6 +408,7 @@
   <div class="steps">
     <div class="step active" id="tab-export" onclick="switchTab('export')">① Export</div>
     <div class="step" id="tab-import" onclick="switchTab('import')">② Import</div>
+    <div class="step" id="tab-reorder" onclick="switchTab('reorder')">③ Reorder</div>
   </div>
 
   <!-- ── EXPORT TAB ── -->
@@ -472,6 +473,88 @@
       <textarea id="import-text" placeholder="Paste Claude's response here…" style="margin-top:14px;"></textarea>
       <button class="btn btn-accent" id="import-btn" onclick="doImport()">Create Playlist in Spotify</button>
       <div class="status" id="import-status"></div>
+    </div>
+  </div>
+
+  <!-- ── REORDER TAB ── -->
+  <div id="panel-reorder" style="display:none;">
+    <div class="card">
+      <div class="card-title">Pick a playlist to reorder</div>
+      <select id="ro-playlist"><option value="">Loading your playlists…</option></select>
+      <button class="btn btn-ghost" onclick="loadReorderPlaylists()" style="margin-top:12px;">↺ Refresh list</button>
+      <div class="status" id="ro-list-status"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">About the set</div>
+
+      <label>Occasion</label>
+      <input type="text" id="ro-occasion" placeholder="e.g. Smooth Sundayz, Modern Jive social dance">
+
+      <label>Cuts</label>
+      <select id="ro-cuts">
+        <option value="reorder">Reorder only (keep every song)</option>
+        <option value="cuts">You may suggest cuts to fit the duration</option>
+      </select>
+
+      <label>Target duration (only used if cuts are allowed)</label>
+      <select id="ro-duration">
+        <option value="">No target</option>
+        <option value="60">1 hour</option>
+        <option value="90">1.5 hours</option>
+        <option value="120">2 hours</option>
+        <option value="180">3 hours</option>
+        <option value="240">4 hours</option>
+      </select>
+
+      <label>Are you opening or relieving another DJ?</label>
+      <select id="ro-role">
+        <option value="open">Opening the night</option>
+        <option value="relieve">Taking over from another DJ (start at a higher energy)</option>
+        <option value="solo">Playing the whole night</option>
+      </select>
+
+      <label>Energy shape</label>
+      <select id="ro-shape">
+        <option value="peaks_winddown">2-3 peaks with valleys, wind down at the end</option>
+        <option value="peaks_high">2-3 peaks with valleys, finish high</option>
+        <option value="build">Steady build to the end</option>
+        <option value="flat">Keep it fairly even</option>
+      </select>
+
+      <label>Hard limits (optional)</label>
+      <textarea id="ro-limits" style="min-height:60px;" placeholder="e.g. BPM between 80 and 110. No explicit songs. Must open with X. Must close with Y."></textarea>
+
+      <label>What does success look like? (optional)</label>
+      <textarea id="ro-success" style="min-height:60px;" placeholder="e.g. Smooth transitions I can mix without adjusting pitch, and no dead spots on the floor."></textarea>
+
+      <label>After ordering</label>
+      <select id="ro-save">
+        <option value="copy">Save as a new playlist (safe, original untouched)</option>
+        <option value="replace">Replace the order of the original playlist</option>
+      </select>
+
+      <button class="btn btn-accent" id="ro-btn" onclick="doReorderExport()">Generate Prompt for Claude</button>
+      <div class="status" id="ro-status"></div>
+    </div>
+
+    <div class="card" id="ro-result-card" style="display:none;">
+      <div class="card-title">Your prompt: ready to paste into Claude</div>
+      <div class="instruction">
+        <strong>What to do:</strong><br>
+        1. Tap <strong>Copy to clipboard</strong><br>
+        2. Paste it into a Claude chat and send<br>
+        3. Paste Claude's reply into the box below
+      </div>
+      <div class="export-box" id="ro-box"></div>
+      <button class="btn btn-accent" onclick="copyReorder()" style="margin-top:14px;">Copy to clipboard</button>
+      <div class="status" id="ro-copy-status"></div>
+
+      <hr class="divider">
+      <label>Claude's reply</label>
+      <textarea id="ro-import-text" placeholder="Paste Claude's reply here…"></textarea>
+      <button class="btn btn-accent" id="ro-import-btn" onclick="doReorderImport()">Apply New Order in Spotify</button>
+      <div class="status" id="ro-import-status"></div>
     </div>
   </div>
 
@@ -586,6 +669,9 @@ const S = {
 let catCache = {};
 let lastExportPool = []; // track pool used for most recent export
 let lastPlaylistName = '';
+let roLoaded = false;     // reorder playlist picker populated
+let roPool = [];          // tracks of the playlist being reordered
+let roPlaylist = null;    // {id, name}
 
 // ══════════════════════════════════════════════════════
 // VIEWS & TABS
@@ -606,8 +692,11 @@ function setStatus(id, msg, type='') {
 function switchTab(tab) {
   document.getElementById('panel-export').style.display = tab==='export' ? 'block' : 'none';
   document.getElementById('panel-import').style.display = tab==='import' ? 'block' : 'none';
+  document.getElementById('panel-reorder').style.display = tab==='reorder' ? 'block' : 'none';
   document.getElementById('tab-export').className = 'step' + (tab==='export' ? ' active' : ' done');
   document.getElementById('tab-import').className = 'step' + (tab==='import' ? ' active' : '');
+  document.getElementById('tab-reorder').className = 'step' + (tab==='reorder' ? ' active' : '');
+  if (tab==='reorder' && !roLoaded) loadReorderPlaylists();
 }
 
 // ══════════════════════════════════════════════════════
@@ -1087,9 +1176,224 @@ function parseNumberedList(text) {
 }
 
 // ══════════════════════════════════════════════════════
+// REORDER — reorder an existing Spotify playlist
+// ══════════════════════════════════════════════════════
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+async function loadReorderPlaylists() {
+  const sel = document.getElementById('ro-playlist');
+  setStatus('ro-list-status','Loading your playlists…');
+  try {
+    const all = await getAllPlaylists();
+    const catNames = new Set(CATEGORIES.map(c => c.spotifyName));
+    const mine = all.filter(p => p && p.id && !catNames.has(p.name));
+    sel.innerHTML = '<option value="">Choose a playlist…</option>' +
+      mine.map(p => `<option value="${escHtml(p.id)}" data-name="${escHtml(p.name)}">${escHtml(p.name)}</option>`).join('');
+    roLoaded = true;
+    setStatus('ro-list-status', `${mine.length} playlists (your 9 category playlists are hidden).`, 'success');
+  } catch(e) {
+    setStatus('ro-list-status', e.message, 'error');
+  }
+}
+
+async function doReorderExport() {
+  const sel = document.getElementById('ro-playlist');
+  const pid = sel.value;
+  if(!pid) { setStatus('ro-status','Pick a playlist first.','error'); return; }
+  const pname = sel.options[sel.selectedIndex].dataset.name || 'Playlist';
+
+  const btn = document.getElementById('ro-btn');
+  btn.disabled = true;
+  try {
+    setStatus('ro-status','Loading tracks…');
+    const tracks = await getPlaylistTracks(pid);
+    if(!tracks.length) throw new Error('That playlist has no playable tracks.');
+
+    let pool = tracks;
+    if (S.get('bpm_api_key')) {
+      pool = await lookupBpmForPool(tracks, (done, total) => {
+        setStatus('ro-status', `Looking up verified BPM: ${done}/${total} tracks…`);
+      });
+    } else {
+      setStatus('ro-status','No GetSongBPM key set, skipping BPM lookup (add one in Settings).');
+    }
+    roPool = pool;
+    roPlaylist = { id: pid, name: pname };
+    const known = pool.filter(t => t.bpm).length;
+
+    const occasion = document.getElementById('ro-occasion').value.trim();
+    const cuts     = document.getElementById('ro-cuts').value === 'cuts';
+    const mins     = document.getElementById('ro-duration').value;
+    const role     = document.getElementById('ro-role').value;
+    const shape    = document.getElementById('ro-shape').value;
+    const limits   = document.getElementById('ro-limits').value.trim();
+    const success  = document.getElementById('ro-success').value.trim();
+
+    const roleText = {
+      open:    'I am opening the night, so start gently and build.',
+      relieve: 'I am taking over from another DJ, so start at a medium to high energy and do not open cold.',
+      solo:    'I am playing the whole night.',
+    }[role];
+    const shapeText = {
+      peaks_winddown: '2-3 energy peaks with valleys between them, then a gradual wind-down for the final songs.',
+      peaks_high:     '2-3 energy peaks with valleys between them, finishing on a high.',
+      build:          'A steady build in energy from start to finish.',
+      flat:           'Fairly even energy throughout, avoiding big swings.',
+    }[shape];
+
+    const prompt = [
+      `I need you to put the songs in an existing Spotify playlist into the best possible order for DJing.`,
+      ``,
+      `PLAYLIST: ${pname}`,
+      occasion ? `OCCASION: ${occasion}` : `OCCASION: Modern Jive / Ceroc social dance`,
+      `MY ROLE: ${roleText}`,
+      `ENERGY SHAPE: ${shapeText}`,
+      cuts
+        ? `CUTS: You may leave out songs that do not fit${mins ? `, aiming for about ${mins} minutes in total (roughly ${Math.round(mins*60/AVG_SECS)} tracks)` : ''}. List only the songs you keep.`
+        : `CUTS: Reorder only. Every song must appear exactly once. Do not drop any.`,
+      limits  ? `HARD LIMITS: ${limits}` : '',
+      success ? `WHAT SUCCESS LOOKS LIKE: ${success}` : '',
+      ``,
+      `RULES:`,
+      `- Keep the BPM difference between neighbouring songs to about 10 or less where possible`,
+      `- Group songs with a similar feel, and move between feels gradually`,
+      `- Put familiar, crowd-pleasing songs at the start and end`,
+      `- Never place two songs by the same artist back to back`,
+      `- Use the VERIFIED BPM figures below. Where BPM is "unknown", use your own knowledge cautiously`,
+      `- Slow ballads are sometimes reported at double-time, so use judgement on obvious cases`,
+      `- Use only the IDs provided and copy them exactly`,
+      ``,
+      `TRACKS (${pool.length} songs, ${known} with verified BPM from GetSongBPM.com):`,
+      `Format: SPOTIFY_ID | Track Name | Artist | BPM`,
+      ``,
+      ...pool.map(t => `${t.id} | ${t.name} | ${t.artist} | ${t.bpm || 'unknown'}`),
+      ``,
+      `Please return your answer as a JSON array only, with no explanation and no markdown fences, just the raw JSON array.`,
+      `Each element: { "id": "<spotify_id>", "name": "<track name>", "artist": "<artist>", "bpm": <number or null>, "phase": "<phase label e.g. Opening, Peak 1, Valley, Wind-down>" }`,
+    ].filter(l => l !== null).join('\n').replace(/\n{3,}/g, '\n\n');
+
+    document.getElementById('ro-box').textContent = prompt;
+    document.getElementById('ro-result-card').style.display = 'block';
+    setStatus('ro-status', `✓ ${pool.length} tracks loaded, BPM verified for ${known}.`, 'success');
+    document.getElementById('ro-result-card').scrollIntoView({behavior:'smooth',block:'start'});
+  } catch(e) {
+    setStatus('ro-status', e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function copyReorder() {
+  const text = document.getElementById('ro-box').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus('ro-copy-status','Copied ✓','success');
+    setTimeout(()=>setStatus('ro-copy-status',''), 2500);
+  } catch(e) {
+    setStatus('ro-copy-status','Copy failed. Select the text manually.','error');
+  }
+}
+
+async function replacePlaylistOrder(pid, ids) {
+  const uris = ids.map(id => `spotify:track:${id}`);
+  // PUT replaces the whole list with the first batch, then append the rest
+  await spFetch(`/playlists/${pid}/items`, {method:'PUT', body:JSON.stringify({uris: uris.slice(0,100)})});
+  for(let i=100;i<uris.length;i+=100) {
+    await spFetch(`/playlists/${pid}/items`, {method:'POST', body:JSON.stringify({uris: uris.slice(i,i+100)})});
+  }
+}
+
+async function doReorderImport() {
+  const raw = document.getElementById('ro-import-text').value.trim();
+  if(!raw) { setStatus('ro-import-status',"Paste Claude's reply first.",'error'); return; }
+  if(!roPlaylist || !roPool.length) { setStatus('ro-import-status','Generate the prompt first.','error'); return; }
+
+  const btn = document.getElementById('ro-import-btn');
+  btn.disabled = true;
+  setStatus('ro-import-status','Parsing reply…');
+  try {
+    let tracks = null;
+    try { tracks = JSON.parse(raw); } catch{}
+    if(!tracks || !Array.isArray(tracks)) {
+      const m = raw.match(/\[[\s\S]*\]/);
+      if(m) { try { tracks = JSON.parse(m[0]); } catch{} }
+    }
+    if(!tracks || !Array.isArray(tracks)) tracks = parseNumberedList(raw);
+    if(!tracks || !tracks.length) throw new Error("Could not parse the reply. Make sure you pasted Claude's full answer.");
+
+    const poolMap = Object.fromEntries(roPool.map(t => [t.id, t]));
+    const seen = new Set();
+    const ordered = [];
+    let unknown = 0;
+    for(const t of tracks) {
+      if(!t || !t.id || seen.has(t.id)) continue;
+      const p = poolMap[t.id];
+      if(!p) { unknown++; continue; }   // ignore IDs that are not in this playlist
+      seen.add(t.id);
+      ordered.push({ id: t.id, name: p.name, artist: p.artist, phase: t.phase || '' });
+    }
+    if(!ordered.length) throw new Error('None of the returned IDs match this playlist.');
+
+    // Reorder-only mode: anything Claude left out goes on the end rather than being lost
+    const cutsAllowed = document.getElementById('ro-cuts').value === 'cuts';
+    let appended = 0;
+    if(!cutsAllowed) {
+      for(const p of roPool) {
+        if(!seen.has(p.id)) { ordered.push({ id: p.id, name: p.name, artist: p.artist, phase: 'Added at end' }); appended++; }
+      }
+    }
+
+    const mode = document.getElementById('ro-save').value;
+    const ids = ordered.map(t => t.id);
+    let resultPl;
+    if(mode === 'replace') {
+      setStatus('ro-import-status','Rewriting the playlist order in Spotify…');
+      await replacePlaylistOrder(roPlaylist.id, ids);
+      resultPl = { id: roPlaylist.id, external_urls: { spotify: `https://open.spotify.com/playlist/${roPlaylist.id}` } };
+    } else {
+      setStatus('ro-import-status','Creating the reordered copy in Spotify…');
+      resultPl = await createPlaylist(S.get('spotify_user_id'), `${roPlaylist.name} (reordered)`, ids);
+    }
+
+    const list = document.getElementById('result-tracks');
+    list.innerHTML = '';
+    ordered.forEach((t,i) => {
+      const row = document.createElement('div');
+      row.className = 'track-row';
+      row.innerHTML = `
+        <span class="track-num">${i+1}</span>
+        <div class="track-info">
+          <div class="track-name">${escHtml(t.name)}</div>
+          <div class="track-artist">${escHtml(t.artist)}</div>
+        </div>
+        <span class="phase-tag">${escHtml(t.phase)}</span>`;
+      list.appendChild(row);
+    });
+
+    const url = resultPl?.external_urls?.spotify || '';
+    const notes = [];
+    if(unknown)  notes.push(`${unknown} returned ID(s) were not in this playlist and were ignored.`);
+    if(appended) notes.push(`${appended} song(s) Claude left out were added at the end.`);
+    document.getElementById('result-summary').innerHTML =
+      `${mode === 'replace' ? `Reordered "${escHtml(roPlaylist.name)}"` : `"${escHtml(roPlaylist.name)} (reordered)"`} · ${ordered.length} tracks<br>` +
+      (notes.length ? notes.map(escHtml).join('<br>') + '<br>' : '') +
+      (url ? `<a href="${url}" target="_blank" style="color:var(--spotify);font-weight:600;">Open directly in Spotify →</a>` : '');
+    showView('result');
+  } catch(e) {
+    setStatus('ro-import-status', e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ══════════════════════════════════════════════════════
 // MISC
 // ══════════════════════════════════════════════════════
 function buildAnother() {
+  document.getElementById('ro-import-text').value = '';
+  document.getElementById('ro-result-card').style.display = 'none';
   document.getElementById('import-text').value = '';
   document.getElementById('export-result-card').style.display = 'none';
   showView('main');
